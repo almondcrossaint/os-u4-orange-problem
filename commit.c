@@ -258,5 +258,11 @@ int commit_create(const char *message, ObjectID *commit_id_out)
     snprintf(commit.message, sizeof(commit.message), "%s", message);
     (void)message;
     (void)commit_id_out;
+    ObjectID parent_id;
+    if (head_read(&parent_id) == 0)
+    {
+        commit.parent = parent_id;
+        commit.has_parent = 1;
+    }
     return -1;
 }
