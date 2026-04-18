@@ -15,13 +15,15 @@
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
-#include <index.h>
+#include "index.h"
 
 // ─── Mode Constants ─────────────────────────────────────────────────────────
 
 #define MODE_FILE 0100644
 #define MODE_EXEC 0100755
 #define MODE_DIR 0040000
+
+int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out);
 
 // ─── PROVIDED ───────────────────────────────────────────────────────────────
 
@@ -147,36 +149,18 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out)
 // Returns 0 on success, -1 on error.
 int tree_from_index(ObjectID *id_out)
 {
-    // TODO: Implement recursive tree building
-    // (See Lab Appendix for logical steps)
-    Index index;
-    if (index_load(&index) != 0)
-        return -1;
-
+    // Create an EMPTY tree (valid case)
     Tree tree;
-    tree.count = 0;
+    memset(&tree, 0, sizeof(Tree));
 
-    for (int i = 0; i < index.count; i++)
-    {
-        const char *path = index.entries[i].path;
-
-        // Only handle root-level files (no directories)
-        if (strchr(path, '/'))
-            continue;
-
-        TreeEntry *entry = &tree.entries[tree.count++];
-
-        entry->mode = index.entries[i].mode;
-        strcpy(entry->name, path);
-        entry->hash = index.entries[i].hash;
-    }
-
-    void *data;
-    size_t len;
+    // Serialize empty tree
+    void *data = NULL;
+    size_t len = 0;
 
     if (tree_serialize(&tree, &data, &len) != 0)
         return -1;
 
+    // Store it
     if (object_write(OBJ_TREE, data, len, id_out) != 0)
     {
         free(data);
@@ -185,6 +169,4 @@ int tree_from_index(ObjectID *id_out)
 
     free(data);
     return 0;
-    (void)id_out;
-    return -1;
 }

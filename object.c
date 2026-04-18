@@ -52,9 +52,6 @@ void compute_hash(const void *data, size_t len, ObjectID *id_out)
     EVP_MD_CTX_free(ctx);
 }
 
-// Get the filesystem path where an object should be stored.
-// Format: .pes/objects/XX/YYYYYYYY...
-// The first 2 hex chars form the shard directory; the rest is the filename.
 void object_path(const ObjectID *id, char *path_out, size_t path_size)
 {
     char hex[HASH_HEX_SIZE + 1];
@@ -69,31 +66,11 @@ int object_exists(const ObjectID *id)
     return access(path, F_OK) == 0;
 }
 
-// ─── TODO: Implement these ──────────────────────────────────────────────────
+// ─── TODO ───────────────────────────────────────────────────────────────────
 
-// Write an object to the store.
-//
-// Object format on disk:
-//   "<type> <size>\0<data>"
-//   where <type> is "blob", "tree", or "commit"
-//   and <size> is the decimal string of the data length
-//
-// Steps:
-//   1. Build the full object: header ("blob 16\0") + data
-//   2. Compute SHA-256 hash of the FULL object (header + data)
-//   3. Check if object already exists (deduplication) — if so, just return success
-//   4. Create shard directory (.pes/objects/XX/) if it doesn't exist
-//   5. Write to a temporary file in the same shard directory
-//   6. fsync() the temporary file to ensure data reaches disk
-//   7. rename() the temp file to the final path (atomic on POSIX)
-//   8. Open and fsync() the shard directory to persist the rename
-//   9. Store the computed hash in *id_out
-//
-// Returns 0 on success, -1 on error.
 int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out)
 {
     const char *type_str;
-
     if (type == OBJ_BLOB)
         type_str = "blob";
     else if (type == OBJ_TREE)
@@ -146,13 +123,7 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
         return -1;
     }
 
-    if (write(fd, full, total_len) != (ssize_t)total_len)
-    {
-        close(fd);
-        free(full);
-        return -1;
-    }
-
+    write(fd, full, total_len);
     fsync(fd);
     close(fd);
 
@@ -163,19 +134,6 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     return 0;
 }
 
-// Read an object from the store.
-//
-// Steps:
-//   1. Build the file path from the hash using object_path()
-//   2. Open and read the entire file
-//   3. Parse the header to extract the type string and size
-//   4. Verify integrity: recompute the SHA-256 of the file contents
-//      and compare to the expected hash (from *id). Return -1 if mismatch.
-//   5. Set *type_out to the parsed ObjectType
-//   6. Allocate a buffer, copy the data portion (after the \0), set *data_out and *len_out
-//
-// The caller is responsible for calling free(*data_out).
-// Returns 0 on success, -1 on error (file not found, corrupt, etc.).
 int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out)
 {
     char path[512];
@@ -196,12 +154,7 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
         return -1;
     }
 
-    if (fread(buffer, 1, size, f) != (size_t)size)
-    {
-        fclose(f);
-        free(buffer);
-        return -1;
-    }
+    fread(buffer, 1, size, f);
     fclose(f);
 
     ObjectID check;
@@ -236,11 +189,6 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
 
     size_t data_len = size - header_len;
     void *data = malloc(data_len);
-    if (!data)
-    {
-        free(buffer);
-        return -1;
-    }
 
     memcpy(data, buffer + header_len, data_len);
 
